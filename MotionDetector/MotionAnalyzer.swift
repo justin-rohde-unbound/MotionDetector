@@ -26,8 +26,11 @@ class MotionAnalyzer: ObservableObject {
     /// Whether frames are currently being processed for motion.
     @Published var isRunning = false
 
-    /// The motion results of the analysis by time.
-    @Published var results: [MotionResult]?
+    /// Total motion found vs. time.
+    @Published var motionResults: [MotionResult]?
+
+    /// Start and end of ranges where humans are detected, in seconds.
+    @Published var humanResults: [(Double, Double)] = []
 
     /// The error that occured during processing, or nil if no errors occurred.
     @Published var error: MotionAnalysisError?
@@ -52,11 +55,12 @@ class MotionAnalyzer: ObservableObject {
 
     /// Reset to initial state.
     func clear() {
-        self.progress = 0
-        self.isRunning = false
-        self.isCancelled = false
-        self.error = nil
-        self.results = nil
+        progress = 0
+        isRunning = false
+        isCancelled = false
+        error = nil
+        motionResults = nil
+        humanResults = []
     }
 
     /// Sets published state and begins motion analysis.
@@ -76,7 +80,8 @@ class MotionAnalyzer: ObservableObject {
 
                 switch results {
                 case .success(let results):
-                    self.results = results
+                    self.motionResults = results.0
+                    self.humanResults = results.1
                 case .failure(let error):
                     guard let motionError = error as? MotionAnalysisError,
                           motionError != .cancelled
@@ -96,7 +101,7 @@ class MotionAnalyzer: ObservableObject {
     ///
     /// - Parameter interval: The number of seconds between frames to compare.
     /// - Returns: The motion data for the calculated frames.
-    func analyze(atInterval interval: Double) async -> Result<[MotionResult], Error> {
+    func analyze(atInterval interval: Double) async -> Result<([MotionResult], [(Double, Double)]), Error> {
         // Extract images to compare
         guard let videoURL = videoURL else {
             return .failure(MotionAnalysisError.noURL)
@@ -107,34 +112,41 @@ class MotionAnalyzer: ObservableObject {
             return .failure(MotionAnalysisError.unableToLoadTrackData)
         }
 
+        guard let videoTrack = try? await asset.load(.tracks).first else {
+            return .failure(MotionAnalysisError.unableToLoadTrackData)
+        }
+
+        guard let naturalSize = try? await videoTrack.load(.naturalSize) else {
+            return .failure(MotionAnalysisError.unableToLoadTrackData)
+        }
+
         let generatedImages = asset.asyncImageSequence(
             interval: interval,
             duration: duration,
-            maximumSize: CGSize(width: 100, height: 100)
+            maximumSize: naturalSize //CGSize(width: 100, height: 100)
         )
+
         let imagesByTime = generatedImages.compactMap { try? ($0.actualTime, $0.image) }
 
         // Collect motion data by time position
         var motionData = [MotionResult]()
-        var observation: VNFeaturePrintObservation?
+        var humanData = [(Double, Double)]()
+        var previousObservation: VNFeaturePrintObservation?
+        var humanStart: Double?
 
         for await (time, cgImage) in imagesByTime {
             if isCancelled {
                 return .failure(MotionAnalysisError.cancelled)
             }
 
-            guard let featurePrintObservation = cgImage.featurePrintObservation() else {
+            guard let currentObservation = cgImage.featurePrintObservation() else {
                 return .failure(MotionAnalysisError.unableToCreateFeaturePrint)
             }
 
-            defer {
-                observation = featurePrintObservation
-            }
-
-            if let previousObservation = observation {
+            if let previousObservation = previousObservation {
                 do {
                     var distance = Float(0)
-                    try featurePrintObservation.computeDistance(&distance, to: previousObservation)
+                    try currentObservation.computeDistance(&distance, to: previousObservation)
                     motionData.append(MotionResult(time: time.seconds, amount: distance))
                 } catch {
                     return .failure(MotionAnalysisError.unableToCalculateFrameDistance)
@@ -143,13 +155,23 @@ class MotionAnalyzer: ObservableObject {
                 motionData.append(MotionResult(time: 0, amount: 0))
             }
 
+            if cgImage.hasHuman() {
+                if humanStart == nil { humanStart = time.seconds }
+            } else {
+                if humanStart != nil {
+                    humanData.append((humanStart!, time.seconds))
+                    humanStart = nil
+                }
+            }
+
+            previousObservation = currentObservation
+
             DispatchQueue.main.async {
                 self.progress = time.seconds / duration
             }
         }
 
-        let results = motionData.sorted { $0.time < $1.time }
-        return .success(results)
+        return .success((motionData, humanData))
     }
 }
 
@@ -166,6 +188,19 @@ extension CGImage {
         } catch {
             print(error)
             return nil
+        }
+    }
+
+    func hasHuman() -> Bool {
+        let requestHandler = VNImageRequestHandler(cgImage: self)
+        let request = VNDetectHumanRectanglesRequest()
+        do {
+            try requestHandler.perform([request])
+            let isEmpty = request.results?.isEmpty ?? true
+            return !isEmpty
+        } catch {
+            print(error)
+            return false
         }
     }
 }
@@ -190,12 +225,12 @@ extension AVAsset {
     ///   - duration: The duration of the asset.
     ///   - maximumSize: The maximum size of images to generate.
     /// - Returns: The async sequence of extracted images.
-    func asyncImageSequence(interval: Double, duration: Double, maximumSize: CGSize) -> AVAssetImageGenerator.Images {
+    func asyncImageSequence(interval: Double, duration: Double, maximumSize: CGSize?) -> AVAssetImageGenerator.Images {
         let imageTimes = stride(from: 0.0, to: duration, by: interval).map {
             CMTime(seconds: $0, preferredTimescale: 600)
         }
         let imageGenerator = AVAssetImageGenerator(asset: self)
-        imageGenerator.maximumSize = maximumSize
+        if let maximumSize = maximumSize { imageGenerator.maximumSize = maximumSize }
         let tolerance = CMTime(seconds: interval / 4.0, preferredTimescale: 600)
         imageGenerator.requestedTimeToleranceBefore = tolerance //.zero
         imageGenerator.requestedTimeToleranceAfter = tolerance //.zero

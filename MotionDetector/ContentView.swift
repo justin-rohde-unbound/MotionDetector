@@ -49,7 +49,7 @@ struct ContentView: View {
     @State var currentTime: Double = 0
 
     /// The analysis interval in seconds.
-    @State var interval: Double = 1.0
+    @State var interval: Double = 2.0
 
     /// Whether clipping is current enabled.
     @State var isClipping = false
@@ -87,7 +87,11 @@ struct ContentView: View {
                 GeometryReader { geometry in
                     ZStack {
                         ThumbnailStrip(videoURL: $videoURL)
-                        MotionChart(motionData: $motionAnalyzer.results)
+                        MotionChart(
+                            motionData: $motionAnalyzer.motionResults,
+                            humanData: $motionAnalyzer.humanResults,
+                            duration: $duration
+                        )
                         PlayheadView(fraction: $playheadFraction) { fraction in
                             handleManualPlayheadFractionChange(tappedFraction: fraction)
                         }
@@ -168,6 +172,15 @@ struct ContentView: View {
 
                     if isClipping {
                         Button {
+                            clipStartFraction = playheadFraction
+                            if clipEndFraction < clipStartFraction {
+                                clipEndFraction = clipStartFraction
+                            }
+                        } label: {
+                            Image(systemName: "chevron.left.to.line")
+                        }
+
+                        Button {
                             if clipExporter.isExporting {
                                 clipExporter.cancel()
                             } else {
@@ -209,6 +222,15 @@ struct ContentView: View {
                         }
                         .alert(item: $clipExporter.error) { error in
                             Alert(title: Text("Error"), message: Text(error.description))
+                        }
+
+                        Button {
+                            clipEndFraction = playheadFraction
+                            if clipStartFraction > clipEndFraction {
+                                clipStartFraction = clipEndFraction
+                            }
+                        } label: {
+                            Image(systemName: "chevron.right.to.line")
                         }
                     }
                 }
@@ -274,7 +296,8 @@ struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         Group {
             let url = URL(string: "https://sample-videos.com/video123/mp4/480/big_buck_bunny_480p_1mb.mp4")!
-            ContentView(videoURL: url)
+            ContentView(videoURL: url, isClipping: true)
+            ContentView(videoURL: url, isClipping: false)
         }
     }
 }
