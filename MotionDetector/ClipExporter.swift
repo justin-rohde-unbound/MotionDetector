@@ -1,6 +1,8 @@
 import SwiftUI
 import AVFoundation
 
+/// TODO refector async portions into own method.
+
 /// Errors that can occur during export of a video clip.
 enum ClipExportError: Error, Identifiable {
     case invalidExportSession
@@ -92,7 +94,6 @@ class ClipExporter: ObservableObject {
             let tempURL = URL(filePath: NSTemporaryDirectory())
                 .appending(component: UUID().uuidString)
                 .appendingPathExtension(outputURL.pathExtension)
-            print(tempURL)
 
             // Convert the video to the output file type and export it to the output URL.
             exportSession.outputFileType = outputFileType

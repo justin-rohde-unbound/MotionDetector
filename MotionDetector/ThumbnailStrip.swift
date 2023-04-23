@@ -1,26 +1,13 @@
 import SwiftUI
 import CoreMedia
 
+/// Tracks the latest value of a size during layout changes.
 struct SizePreferenceKey: PreferenceKey {
     static var defaultValue = CGSize.zero
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
         value = nextValue()
     }
 }
-//
-//struct ImageCache {
-//    static var cache = [CMTime: NSImage]()
-//
-//    func image(forTime time: CMTime) -> NSImage? {
-//        Self.cache[time]
-//    }
-//
-//    func setImage(_ image: NSImage, forTime: CMTime) {
-//        Self.cache[time] = image
-//    }
-//}
-
-// struct CachedImage {}
 
 struct ThumbnailStrip: View {
     /// Generates thumbnails for the current video.
@@ -30,7 +17,7 @@ struct ThumbnailStrip: View {
     @StateObject private var size: Debounced<CGSize> = Debounced(delay: 0.25)
 
     /// The URL of the video from which to extract thumbnails.
-    @Binding var videoURL: URL?
+    let videoURL: URL
 
     var body: some View {
         GeometryReader { geometry in
@@ -57,7 +44,7 @@ struct ThumbnailStrip: View {
     ///
     /// - Parameter url: The URL of the video from which to extract thumbnails.
     private func refreshThumbnails(`for` url: URL?) {
-        if let videoURL = videoURL, let size = size.value {
+        if let size = size.value {
             thumbnailGenerator.generateThumbnails(
                 fromURL: videoURL,
                 forContainerSize: size

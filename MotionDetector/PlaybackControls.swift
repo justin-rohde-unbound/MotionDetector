@@ -3,91 +3,57 @@ import AVFoundation
 
 /// A set of controls for video playback.
 struct PlaybackControls: View {
-    /// Responsible for playing the video.
-    @Binding var player: AVPlayer
-
-    /// The current playback rate.
-    @Binding var rate: Float
+    @ObservedObject var playerManager: AVPlayerManager
 
     var body: some View {
         VStack {
             HStack {
+                Text("\(Int(-playerManager.rate))x")
+                    .frame(width: 30)
+                    .opacity(playerManager.rate < 0 ? 1 : 0)
+
                 Button {
-                    player.pause()
-                    if player.currentItem?.canStepBackward ?? false {
-                        player.currentItem?.step(byCount: -1)
-                    }
+                    playerManager.stepBackward()
                 } label: {
                     Image(systemName: "backward.frame.fill")
                 }
 
                 Button {
-                    player.increaseBackwardRate()
-                    rate = player.rate
+                    playerManager.increaseBackwardRate()
                 } label: {
                     Image(systemName: "backward.fill")
                 }
 
                 Button {
-                    if rate == 0 { player.play() }
-                    else { player.pause() }
-                    rate = player.rate
+                    playerManager.togglePlayback()
                 } label: {
-                    Image(systemName: rate == 0 ? "play.fill" : "pause.fill")
+                    Image(systemName: playerManager.rate == 0 ? "play.fill" : "pause.fill")
                 }
 
                 Button {
-                    player.increaseForwardRate()
-                    rate = player.rate
+                    playerManager.increaseForwardRate()
                 } label: {
                     Image(systemName: "forward.fill")
                 }
 
                 Button {
-                    player.pause()
-                    if player.currentItem?.canStepBackward ?? false {
-                        player.currentItem?.step(byCount: 1)
-                    }
+                    playerManager.stepForward()
                 } label: {
                     Image(systemName: "forward.frame.fill")
                 }
-            }
 
-            Text("\(Int(rate))x")
-                .frame(width: 50)
-                .opacity(rate == 0 ? 0 : 1)
+                Text("\(Int(playerManager.rate))x")
+                    .frame(width: 30)
+                    .opacity(playerManager.rate > 0 ? 1 : 0)
+            }
         }
     }
 }
 
 struct VideoPlaybackControls_Previews: PreviewProvider {
-    @State static var player = AVPlayer()
+    @StateObject static var playerManager = AVPlayerManager(player: AVPlayer())
 
     static var previews: some View {
-        PlaybackControls(player: $player, rate: .constant(1))
-    }
-}
-
-extension AVPlayer {
-    /// Doubles the current rate, up to a maximum value.
-    ///
-    /// If the current rate is negative, it is instead reset to normal forward playback.
-    func increaseForwardRate() {
-        if rate <= 0 {
-            rate = 1
-        } else if rate < 64 {
-            rate *= 2
-        }
-    }
-
-    /// Doubles the backware playback rate, up to a maximum value.
-    ///
-    /// If the current rate is positive, it is instead reset to normal backward playback.
-    func increaseBackwardRate() {
-        if rate >= 0 {
-            rate = -1
-        } else if rate > -64 {
-            rate *= 2
-        }
+        PlaybackControls(playerManager: playerManager)
     }
 }

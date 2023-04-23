@@ -30,27 +30,30 @@ class ThumbnailGenerator: ObservableObject {
     ///
     /// - Parameters:
     ///   - asset: The asset from which to extract images.
-    ///   - size: The size of the view in which all thumbnails must fit.
+    ///   - containerSize: The size of the view in which all thumbnails must fit.
     /// - Returns: An array of thumbnail images corresponding to the
     /// position in the video timeline where they appear.
     func generateThumbnailsAsync(
         from asset: AVAsset,
         toFillSize containerSize: CGSize
-    ) async -> Result<[NSImage], MotionAnalysisError> {
+    ) async -> Result<[NSImage], VideoAnalysisError> {
         guard
             let track = try? await asset.loadTracks(withMediaType: .video).first,
             let videoSize = try? await track.load(.naturalSize),
             let duration = try? await asset.load(.duration)
         else {
-            return .failure(MotionAnalysisError.unableToLoadTrackData)
+            return .failure(.invalidVideoTrack)
         }
 
         let thumbnailWidth = (videoSize.width / videoSize.height) * containerSize.height
         let thumbnailSize = CGSize(width: thumbnailWidth, height: containerSize.height)
         let interval = duration.seconds * (thumbnailWidth / containerSize.width)
-        let images = asset.asyncImageSequence(
-            interval: interval,
-            duration: duration.seconds,
+        let imageTimes = stride(from: 0.0, to: duration.seconds, by: interval).map {
+            CMTime(seconds: $0, preferredTimescale: 600)
+        }
+        let images = await asset.frames(
+            atTimes: imageTimes,
+            tolerance: interval / 4.0,
             maximumSize: thumbnailSize
         )
 

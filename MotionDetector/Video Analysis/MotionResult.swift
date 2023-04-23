@@ -6,7 +6,7 @@ struct MotionResult: Identifiable {
     let time: Double
 
     /// The amount of difference between the frame at this time and the previous extracted frame.
-    let amount: Float
+    let amount: Double
 
     // MARK: - Identifiable conformance
 

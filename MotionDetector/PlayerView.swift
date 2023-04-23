@@ -2,16 +2,16 @@ import SwiftUI
 import AVFoundation
 
 /// Displays a video player layer without any added controls.
-struct PlayerView: NSViewRepresentable {
+struct AVPlayerView: NSViewRepresentable {
     /// The video player that controls what is displayed in the view.
     let videoPlayer: AVPlayer
 
     func makeNSView(context: Context) -> some NSView {
-        PlayerNSView(videoPlayer)
+        AVPlayerNSView(videoPlayer)
     }
 
     func updateNSView(_ nsView: NSViewType, context: Context) {
-        guard let view = nsView as? PlayerNSView else { return }
+        guard let view = nsView as? AVPlayerNSView else { return }
 
         // Make sure player is resized along with view
         view.playerLayer.bounds = view.bounds
@@ -19,7 +19,7 @@ struct PlayerView: NSViewRepresentable {
 }
 
 /// A simple view that displays video content, responding to commands from an AVPlayer.
-class PlayerNSView: NSView {
+class AVPlayerNSView: NSView {
     /// The layer that will display video content.
     let playerLayer = AVPlayerLayer()
 
